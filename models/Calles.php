@@ -12,7 +12,7 @@ class Calles {
     public function __construct() {
         $database = new Database();
         $this->conn = $database->getConnection();
-        $this->max_results = Config::get('MAX_SEARCH_RESULTS', 50);
+        $this->max_results = Config::get('MAX_SEARCH_RESULTS', 1000);
     }
 
     /**
@@ -29,7 +29,7 @@ class Calles {
             throw new InvalidArgumentException('El término de búsqueda debe tener al menos 2 caracteres');
         }
 
-        $limit = $limit ?? Config::get('DEFAULT_SEARCH_LIMIT', 20);
+        $limit = $limit ?? Config::get('DEFAULT_SEARCH_LIMIT', 100);
         $limit = min($limit, $this->max_results); // Respetar límite máximo
         $offset = max(0, $offset); // Offset no puede ser negativo
 
@@ -77,10 +77,10 @@ class Calles {
 
     // Obtener tipos de vialidad
     public function obtenerTiposVialidad() {
-        $sql = "SELECT t_vial2 as tipo, COUNT(*) as cantidad
+        $sql = "SELECT tipo_vialidad as tipo, COUNT(*) as cantidad
                 FROM " . $this->table_name . " 
-                WHERE t_vial2 IS NOT NULL AND t_vial2 != ''
-                GROUP BY t_vial2
+                WHERE tipo_vialidad IS NOT NULL AND tipo_vialidad != ''
+                GROUP BY tipo_vialidad
                 ORDER BY cantidad DESC";
         
         $stmt = $this->conn->prepare($sql);
@@ -91,18 +91,18 @@ class Calles {
 
     // Buscar intersecciones
     public function buscarIntersecciones($calle1, $calle2 = null, $limit = 20) {
-        $sql = "SELECT id, nombre, calle1, calle2, v_ppal, cla_calle
+        $sql = "SELECT id, nombre_vialidad, calle_inicio, calle_fin, via_principal, clasificacion
                 FROM " . $this->table_name . " 
-                WHERE calle1 LIKE :calle1 OR calle2 LIKE :calle1";
+                WHERE calle_inicio LIKE :calle1 OR calle_fin LIKE :calle1";
         
         $params = [':calle1' => "%" . $calle1 . "%"];
         
         if ($calle2) {
-            $sql .= " OR calle1 LIKE :calle2 OR calle2 LIKE :calle2";
+            $sql .= " OR calle_inicio LIKE :calle2 OR calle_fin LIKE :calle2";
             $params[':calle2'] = "%" . $calle2 . "%";
         }
         
-        $sql .= " ORDER BY nombre LIMIT :limit";
+        $sql .= " ORDER BY nombre_vialidad LIMIT :limit";
         $params[':limit'] = $limit;
         
         $stmt = $this->conn->prepare($sql);
@@ -122,7 +122,7 @@ class Calles {
     public function contarCalles($query = null) {
         try {
             if ($query) {
-                $sql = "SELECT COUNT(*) as total FROM " . $this->table_name . " WHERE nombre LIKE :query";
+                $sql = "SELECT COUNT(*) as total FROM " . $this->table_name . " WHERE nombre_vialidad LIKE :query";
                 $stmt = $this->conn->prepare($sql);
                 $searchTerm = "%" . trim($query) . "%";
                 $stmt->bindParam(':query', $searchTerm, PDO::PARAM_STR);
@@ -138,6 +138,241 @@ class Calles {
         } catch (PDOException $e) {
             $this->logError('Error contando calles: ' . $e->getMessage());
             return 0;
+        }
+    }
+
+    /**
+     * Contar calles principales
+     * @return int Total de calles principales
+     */
+    public function contarCallesPrincipales() {
+        try {
+            $sql = "SELECT COUNT(*) as total FROM " . $this->table_name . " WHERE via_principal = 'SI'";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetch();
+            return (int) $result['total'];
+        } catch (PDOException $e) {
+            $this->logError('Error contando calles principales: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Contar calles por municipio
+     * @return array Conteo por municipio
+     */
+    public function contarPorMunicipio() {
+        try {
+            $sql = "SELECT municipio, COUNT(*) as total FROM " . $this->table_name . " 
+                    WHERE municipio IS NOT NULL AND municipio != '' 
+                    GROUP BY municipio ORDER BY total DESC";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->execute();
+            return $stmt->fetchAll();
+        } catch (PDOException $e) {
+            $this->logError('Error contando por municipio: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Contar calles por clasificación
+     * @return array Conteo por clasificación
+     */
+    public function contarPorClasificacion() {
+        try {
+            $sql = "SELECT clasificacion, COUNT(*) as total FROM " . $this->table_name . " 
+                    WHERE clasificacion IS NOT NULL AND clasificacion != '' 
+                    GROUP BY clasificacion ORDER BY total DESC";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->execute();
+            return $stmt->fetchAll();
+        } catch (PDOException $e) {
+            $this->logError('Error contando por clasificación: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Obtener detalles de una calle específica
+     * @param int $id ID de la calle
+     * @return array|null Detalles de la calle
+     */
+    public function obtenerDetalles($id) {
+        try {
+            $sql = "SELECT * FROM " . $this->table_name . " WHERE id = :id";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetch();
+        } catch (PDOException $e) {
+            $this->logError('Error obteniendo detalles de calle: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Obtener intersecciones de una calle
+     * @param int $id ID de la calle
+     * @return array Intersecciones
+     */
+    public function obtenerIntersecciones($id) {
+        try {
+            $sql = "SELECT calle_inicio, calle_fin FROM " . $this->table_name . " WHERE id = :id";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
+            $calle = $stmt->fetch();
+            
+            if (!$calle) {
+                return [];
+            }
+            
+            $intersecciones = [];
+            if ($calle['calle_inicio']) {
+                $intersecciones[] = $calle['calle_inicio'];
+            }
+            if ($calle['calle_fin']) {
+                $intersecciones[] = $calle['calle_fin'];
+            }
+            
+            return $intersecciones;
+        } catch (PDOException $e) {
+            $this->logError('Error obteniendo intersecciones: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Obtener calles cercanas por código postal
+     * @param string $codigo Código postal
+     * @param int $limit Límite de resultados
+     * @return array Calles cercanas
+     */
+    public function obtenerCallesCercanasPorCP($codigo, $limit = 10) {
+        try {
+            // Esta es una implementación básica - en un sistema real usarías coordenadas geográficas
+            $sql = "SELECT * FROM " . $this->table_name . " 
+                    WHERE municipio LIKE :codigo OR nombre_vialidad LIKE :codigo
+                    ORDER BY nombre_vialidad LIMIT :limit";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->bindValue(':codigo', '%' . $codigo . '%', PDO::PARAM_STR);
+            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetchAll();
+        } catch (PDOException $e) {
+            $this->logError('Error obteniendo calles cercanas por CP: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Calcular ruta entre dos calles
+     * @param string $from Calle origen
+     * @param string $to Calle destino
+     * @return array Información de la ruta
+     */
+    public function calcularRuta($from, $to) {
+        try {
+            // Implementación básica - en un sistema real usarías algoritmos de routing
+            $sql = "SELECT * FROM " . $this->table_name . " 
+                    WHERE nombre_vialidad LIKE :from OR nombre_vialidad LIKE :to
+                    ORDER BY nombre_vialidad";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->bindValue(':from', '%' . $from . '%', PDO::PARAM_STR);
+            $stmt->bindValue(':to', '%' . $to . '%', PDO::PARAM_STR);
+            $stmt->execute();
+            $calles = $stmt->fetchAll();
+            
+            return [
+                'from' => $from,
+                'to' => $to,
+                'calles_encontradas' => $calles,
+                'distancia_estimada' => 'N/A',
+                'tiempo_estimado' => 'N/A',
+                'nota' => 'Implementación básica - requiere algoritmo de routing'
+            ];
+        } catch (PDOException $e) {
+            $this->logError('Error calculando ruta: ' . $e->getMessage());
+            return ['error' => 'Error calculando ruta'];
+        }
+    }
+
+    /**
+     * Obtener conexiones de una calle
+     * @param string $calle Nombre de la calle
+     * @return array Conexiones
+     */
+    public function obtenerConexiones($calle) {
+        try {
+            $sql = "SELECT DISTINCT calle_inicio, calle_fin FROM " . $this->table_name . " 
+                    WHERE nombre_vialidad LIKE :calle OR calle_inicio LIKE :calle OR calle_fin LIKE :calle";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->bindValue(':calle', '%' . $calle . '%', PDO::PARAM_STR);
+            $stmt->execute();
+            $resultados = $stmt->fetchAll();
+            
+            $conexiones = [];
+            foreach ($resultados as $resultado) {
+                if ($resultado['calle_inicio']) {
+                    $conexiones[] = $resultado['calle_inicio'];
+                }
+                if ($resultado['calle_fin']) {
+                    $conexiones[] = $resultado['calle_fin'];
+                }
+            }
+            
+            return array_unique($conexiones);
+        } catch (PDOException $e) {
+            $this->logError('Error obteniendo conexiones: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Analizar calles por municipio
+     * @return array Análisis por municipio
+     */
+    public function analizarPorMunicipio() {
+        try {
+            $sql = "SELECT municipio, 
+                           COUNT(*) as total_calles,
+                           COUNT(CASE WHEN via_principal = 'SI' THEN 1 END) as calles_principales,
+                           COUNT(CASE WHEN tipo_vialidad = 'Avenida' THEN 1 END) as avenidas,
+                           COUNT(CASE WHEN tipo_vialidad = 'Calle' THEN 1 END) as calles
+                    FROM " . $this->table_name . " 
+                    WHERE municipio IS NOT NULL AND municipio != ''
+                    GROUP BY municipio 
+                    ORDER BY total_calles DESC";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->execute();
+            return $stmt->fetchAll();
+        } catch (PDOException $e) {
+            $this->logError('Error analizando por municipio: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Analizar densidad de calles
+     * @return array Análisis de densidad
+     */
+    public function analizarDensidad() {
+        try {
+            $sql = "SELECT tipo_vialidad, 
+                           COUNT(*) as cantidad,
+                           ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM " . $this->table_name . "), 2) as porcentaje
+                    FROM " . $this->table_name . " 
+                    WHERE tipo_vialidad IS NOT NULL AND tipo_vialidad != ''
+                    GROUP BY tipo_vialidad 
+                    ORDER BY cantidad DESC";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->execute();
+            return $stmt->fetchAll();
+        } catch (PDOException $e) {
+            $this->logError('Error analizando densidad: ' . $e->getMessage());
+            return [];
         }
     }
 

@@ -42,3 +42,5 @@
 [2025-10-20 06:00:51] [CALLES] Error contando calles: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'mapas_automatizacion.vialidades_chihuahua' doesn't exist
 [2025-10-20 06:01:00] [CALLES] Error contando calles: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'mapas_automatizacion.vialidades_chihuahua' doesn't exist
 [2025-10-20 06:01:00] [CALLES] Error contando calles: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'mapas_automatizacion.vialidades_chihuahua' doesn't exist
+[2025-10-20 14:18:45] [CALLES] Error contando calles: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'mapas_automatizacion.vialidades_chihuahua' doesn't exist
+[2025-10-20 14:18:45] [CALLES] Error contando calles: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'mapas_automatizacion.vialidades_chihuahua' doesn't exist

@@ -4,7 +4,6 @@
 require_once __DIR__ . '/../config/Config.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../models/Calles.php';
-require_once __DIR__ . '/../models/Servicios.php';
 require_once __DIR__ . '/../models/CodigosPostales.php';
 
 // Inicializar configuración
@@ -36,8 +35,8 @@ try {
 
     // Obtener parámetros
     $query = $_GET['q'] ?? '';
-    $type = $_GET['type'] ?? 'calles'; // calles, servicios o codigos_postales
-    $limit = min((int)($_GET['limit'] ?? 10), 20); // Máximo 20 resultados
+    $type = $_GET['type'] ?? 'codigos_postales'; // Solo codigos_postales disponibles
+    $limit = min((int)($_GET['limit'] ?? 50), 1000); // Máximo 1000 resultados
 
     // Validar parámetros
     if (empty($query) || strlen(trim($query)) < 2) {
@@ -47,35 +46,7 @@ try {
     $query = trim($query);
 
     // Procesar según el tipo
-    if ($type === 'calles') {
-        $calles = new Calles();
-        $resultados = $calles->buscarCalles($query, $limit);
-        
-        $suggestions = [];
-        foreach ($resultados as $calle) {
-            $suggestions[] = [
-                'value' => $calle['nombre_vialidad'],
-                'label' => $calle['nombre_vialidad'],
-                'tipo' => $calle['tipo_vialidad'] ?? '',
-                'sector' => $calle['municipio'] ?? ''
-            ];
-        }
-        
-    } elseif ($type === 'servicios') {
-        $servicios = new Servicios();
-        $resultados = $servicios->buscarServiciosPorNombre($query, $limit);
-        
-        $suggestions = [];
-        foreach ($resultados as $servicio) {
-            $suggestions[] = [
-                'value' => $servicio['nombre'],
-                'label' => $servicio['nombre'],
-                'tipo' => $servicio['tipo'] ?? '',
-                'direccion' => $servicio['direccion'] ?? ''
-            ];
-        }
-        
-    } elseif ($type === 'codigos_postales') {
+    if ($type === 'codigos_postales') {
         $codigosPostales = new CodigosPostales();
         $resultados = $codigosPostales->buscarGeneral($query, $limit);
         
@@ -92,7 +63,7 @@ try {
         }
         
     } else {
-        handleError('Tipo de búsqueda no válido');
+        handleError('Tipo de búsqueda no válido. Solo se permite: codigos_postales');
     }
 
     // Enviar respuesta exitosa

@@ -1,0 +1,8 @@
+RewriteEngine On
+
+# Redirigir todas las peticiones API al router
+RewriteCond %{REQUEST_URI} ^/api/
+RewriteRule ^api/(.*)$ api.php [QSA,L]
+
+# Redirigir la raíz a Swagger
+RewriteRule ^$ api/swagger.php [L]
